@@ -78,11 +78,22 @@ $disapprovedJobs = $disapprovedJobsResult->fetch_assoc()['disapproved_jobs'];
 if (isset($_POST['update_settings'])) {
     $printCost = $_POST['print_cost'];
     $maxPages = $_POST['max_pages'];
+
+    // Update settings in the database
     $sql = "UPDATE settings SET print_cost=?, max_pages=?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("di", $printCost, $maxPages);
     if ($stmt->execute()) {
-        echo "<script>alert('Settings updated successfully!');</script>";
+        // Notify users about the new print cost
+        $notifySql = "UPDATE users SET notification = CONCAT('The new print cost is ₹', ?)";
+        $notifyStmt = $conn->prepare($notifySql);
+        $notifyStmt->bind_param("d", $printCost);
+        if ($notifyStmt->execute()) {
+            echo "<script>alert('Settings updated and users notified successfully!');</script>";
+        } else {
+            echo "<script>alert('Error notifying users!');</script>";
+        }
+        $notifyStmt->close();
     } else {
         echo "<script>alert('Error updating settings!');</script>";
     }
