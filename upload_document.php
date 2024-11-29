@@ -22,41 +22,46 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Fetch the user's wallet balance
-$sql = "SELECT balance FROM wallets WHERE user_id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $userId);
-$stmt->execute();
-$stmt->bind_result($userBalance);
-$stmt->fetch();
-$stmt->close();
+// Static wallet balance for testing
+$userBalance = 500.00; // Static wallet balance (for testing purposes)
 
 // Fetch the print cost per page from the settings table
-$sql = "SELECT print_cost FROM settings WHERE id = 1";  // Assuming only one settings row
+$sql = "SELECT print_cost FROM settings WHERE id = 1";
 $result = $conn->query($sql);
-$settings = $result->fetch_assoc();
-$printCostPerPage = $settings['print_cost'];
 
-// Get the number of pages from the form submission
-$numberOfPages = $_POST['number_of_pages'];
-$totalCost = $numberOfPages * $printCostPerPage;  // Calculate total cost for printing
+if ($result && $result->num_rows > 0) {
+    $settings = $result->fetch_assoc();
+    $printCostPerPage = isset($settings['print_cost']) ? $settings['print_cost'] : 0;
+} else {
+    echo "Error: No settings found or database issue. Please ensure the settings table has valid data.";
+    $printCostPerPage = 0; // Default value
+}
 
-// Check if the user has sufficient balance
-if ($userBalance >= $totalCost) {
-    // Deduct the total cost from the user's wallet
-    $newBalance = $userBalance - $totalCost;
-    
-    $sql = "UPDATE wallets SET balance = ? WHERE user_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("di", $newBalance, $userId);
-    
-    if ($stmt->execute()) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Get the number of pages from the form submission
+    $numberOfPages = (int)$_POST['number_of_pages'];
+    $totalCost = $numberOfPages * $printCostPerPage; // Calculate total cost for printing
+
+    // Check if the user has sufficient balance
+    if ($userBalance >= $totalCost) {
+        // Deduct the total cost from the user's wallet (Static for now)
+        $newBalance = $userBalance - $totalCost;
+
+        // Simulate updating the wallet (no need to run a database update for testing)
+        // $sql = "UPDATE wallets SET balance = ? WHERE user_id = ?";
+        // $stmt = $conn->prepare($sql);
+        // $stmt->bind_param("di", $newBalance, $userId);
+        // $stmt->execute();
+        // $stmt->close();
+
+        echo "<script>alert('Your print job has been submitted successfully! Total cost: ₹" . number_format($totalCost, 2) . ". Remaining balance: ₹" . number_format($newBalance, 2) . "');</script>";
+
         // Proceed with file upload if balance is sufficient
         if (isset($_FILES['document']) && $_FILES['document']['error'] === UPLOAD_ERR_OK) {
             $fileName = $_FILES['document']['name'];
             $fileTmpPath = $_FILES['document']['tmp_name'];
             $uploadDir = 'uploads/';
-            
+
             // Ensure 'uploads' directory exists
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0777, true);
@@ -73,9 +78,9 @@ if ($userBalance >= $totalCost) {
                     $sql = "INSERT INTO print_jobs (user_id, file_name, file_path, status) VALUES (?, ?, ?, 'pending')";
                     $stmt = $conn->prepare($sql);
                     $stmt->bind_param("iss", $userId, $fileName, $filePath);
-                    
+
                     if ($stmt->execute()) {
-                        echo "Your print job has been submitted successfully! Total cost: ₹" . number_format($totalCost, 2);
+                        // Successful print job submission
                     } else {
                         echo "Database error: " . $stmt->error;
                     }
@@ -90,11 +95,9 @@ if ($userBalance >= $totalCost) {
             echo "No file uploaded or there was an error during the upload.";
         }
     } else {
-        echo "Error updating wallet balance!";
+        echo "<script>alert('Insufficient balance! You need ₹" . number_format($totalCost - $userBalance, 2) . " more to complete this print job.');</script>";
     }
-} else {
-    echo "Insufficient balance! You need ₹" . number_format($totalCost - $userBalance, 2) . " more to complete this print job.";
 }
 
 $conn->close(); // Close the database connection
-
+?>
